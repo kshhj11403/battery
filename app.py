@@ -3,225 +3,331 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
-from plotly.subplots import make_subplots
-from sklearn.ensemble import IsolationForest
-import time
-import random
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 
 # ==========================================
-# 1. PAGE CONFIGURATION
+# PAGE CONFIG
 # ==========================================
 st.set_page_config(
-    page_title="배터리 AI 클라우드 플랫폼",
-    page_icon="⚡",
-    layout="wide",
-    initial_sidebar_state="collapsed" # 사이드바 기본 숨김
+    page_title="Battery Intelligence",
+    page_icon="🔋",
+    layout="centered", # 모던 웹서비스 느낌을 위해 centered 또는 좁은 여백 사용
+    initial_sidebar_state="collapsed"
 )
 
 # ==========================================
-# 2. ADVANCED CSS (모던 & 깔끔한 UI 설정)
+# MODERN LIGHT CSS (Apple / Linear / Notion 스타일)
 # ==========================================
 st.markdown("""
 <style>
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
 html, body, [class*="css"] {
-    font-family: 'Pretendard', sans-serif;
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+    color: #111827;
+    background-color: #ffffff;
 }
 
-/* 세련된 다크 그라데이션 배경 */
-.stApp {
-    background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
-}
+/* 상단 헤더 숨기기 */
+header {visibility: hidden;}
 
-.main-title {
-    font-size: 2.5rem;
+/* 메인 타이틀 */
+.service-title {
+    font-size: 2rem;
     font-weight: 800;
-    text-align: center;
-    color: #f8fafc;
-    margin-top: 10px;
-    margin-bottom: 30px;
-    letter-spacing: -1px;
-    text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+    color: #0f172a;
+    margin-bottom: 24px;
+    letter-spacing: -0.02em;
 }
 
-.section-header {
-    font-size: 1.2rem;
+/* 카드 UI */
+.metric-container {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 32px;
+}
+.metric-card {
+    flex: 1;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+.metric-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 8px;
+}
+.metric-value {
+    font-size: 1.75rem;
     font-weight: 700;
-    color: #38bdf8;
-    margin-bottom: 10px;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-    padding-bottom: 5px;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+}
+.metric-sub {
+    font-size: 0.75rem;
+    color: #3b82f6;
+    margin-top: 4px;
+    font-weight: 500;
+}
+
+/* AI Analyst Box */
+.ai-insight-box {
+    background: #eff6ff;
+    border-left: 4px solid #3b82f6;
+    border-radius: 0 8px 8px 0;
+    padding: 20px 24px;
+    margin-bottom: 40px;
+}
+.ai-insight-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1e3a8a;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.ai-insight-text {
+    font-size: 0.95rem;
+    color: #1e40af;
+    line-height: 1.6;
+    margin: 0;
+}
+.highlight {
+    font-weight: 700;
+    color: #1d4ed8;
+    background: #dbeafe;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+/* 섹션 타이틀 */
+.section-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-top: 48px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f1f5f9;
 }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. TITLE & CONTROL CENTER (중앙 상단 배치)
+# USER INPUTS (일반인/의사결정권자 맞춤형)
 # ==========================================
-st.markdown("<div class='main-title'>⚡ 통합 배터리 AI 대시보드</div>", unsafe_allow_html=True)
+st.markdown("<div class='service-title'>Battery Intelligence</div>", unsafe_allow_html=True)
 
-st.markdown("<div class='section-header'>🎛️ 시뮬레이션 제어 패널</div>", unsafe_allow_html=True)
-
-# 2줄로 나누어 슬라이더 배치 (가시성 극대화)
-ctrl_col1, ctrl_col2, ctrl_col3 = st.columns(3)
-with ctrl_col1:
-    cycle = st.slider("충방전 사이클 (Cycle)", 0, 5000, 800, help="현재까지 진행된 배터리 충방전 횟수")
-with ctrl_col2:
-    temp = st.slider("셀 평균 온도 (°C)", 10, 70, 28, help="배터리 팩의 현재 온도")
-with ctrl_col3:
-    ir = st.slider("내부 저항 (Ω)", 0.01, 0.08, 0.025, step=0.005, help="열화 수준을 나타내는 내부 저항값")
-
-ctrl_col4, ctrl_col5 = st.columns(2)
-with ctrl_col4:
-    qc = st.slider("충전 용량 (Ah)", 0.5, 2.0, 1.25)
-with ctrl_col5:
-    qd = st.slider("방전 용량 (Ah)", 0.5, 2.0, 1.18)
-
-st.markdown("<br>", unsafe_allow_html=True)
+with st.expander("⚙️ 배터리 사용 환경 설정 (시뮬레이션)", expanded=True):
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        years_used = st.number_input("사용 기간 (년)", min_value=0.5, max_value=10.0, value=2.0, step=0.5)
+    with col2:
+        avg_temp = st.slider("주 평균 노출 온도 (°C)", 10, 50, 32)
+    with col3:
+        fast_charge_ratio = st.slider("급속 충전 빈도 (%)", 0, 100, 65)
 
 # ==========================================
-# 4. HEALTH ENGINE (전문 분석 엔진)
+# ENGINE (백그라운드 계산 로직)
 # ==========================================
-soh = max(40, 100 - (cycle * 0.015))
-soc = np.clip(80 + np.random.normal(0, 3), 0, 100)
-rul = int(max(0, 4000 - cycle))
-health_score = (soh * 0.5) + (100 - ir * 1000) * 0.3 + (100 - abs(temp - 25)) * 0.2
+# 기존의 Cycle, IR 등을 사용자 입력 기반으로 유추
+estimated_cycles = years_used * 250
+temp_stress = max(0, avg_temp - 25) * 0.8
+fast_charge_stress = fast_charge_ratio * 0.15
 
-grade = "A (안전)"
-grade_color = "normal"
-if health_score < 80: 
-    grade = "B (주의)"
-if health_score < 60: 
-    grade = "C (위험)"
-    grade_color = "inverse"
+# SOH 계산 (100% 시작)
+soh_drop = (estimated_cycles * 0.012) + temp_stress + fast_charge_stress
+current_soh = max(10, 100 - soh_drop)
 
-# ==========================================
-# 5. KPI DASHBOARD
-# ==========================================
-st.markdown("<div class='section-header'>📊 핵심 상태 지표 (KPI)</div>", unsafe_allow_html=True)
-kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+# 수명 계산 (SOH 70%를 교체 주기로 가정)
+degradation_rate_per_year = soh_drop / years_used if years_used > 0 else 5.0
+years_to_replacement = max(0, (current_soh - 70) / degradation_rate_per_year)
 
-kpi1.metric("SOH (잔존 건강도)", f"{soh:.1f}%", "-0.2%")
-kpi2.metric("SOC (현재 충전량)", f"{soc:.1f}%", "+1.3%")
-kpi3.metric("RUL (예상 잔여 수명)", f"{rul:,} Cycles")
-kpi4.metric("종합 시스템 등급", grade, delta_color=grade_color)
-
-st.markdown("<br>", unsafe_allow_html=True)
+# 교체 예상 분기 계산
+now = datetime(2026, 6, 12)
+replace_date = now + relativedelta(days=int(years_to_replacement * 365))
+replace_quarter = f"{replace_date.year} Q{(replace_date.month-1)//3 + 1}"
 
 # ==========================================
-# 6. TWO-TAB SYSTEM (직관적인 2-Tab 구조)
+# 1. TOP 3 KPI CARDS
 # ==========================================
-tab1, tab2 = st.tabs(["🟢 실시간 모니터링", "🧠 AI 심층 분석 & 예측"])
+st.markdown(f"""
+<div class="metric-container">
+    <div class="metric-card">
+        <div class="metric-title">배터리 건강도</div>
+        <div class="metric-value">{current_soh:.0f} / 100</div>
+        <div class="metric-sub">{'안정적' if current_soh > 80 else '주의 필요'}</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-title">예상 교체 시점</div>
+        <div class="metric-value">{replace_quarter if current_soh > 70 else '즉시 교체'}</div>
+        <div class="metric-sub">수명 한계선(SOH 70%) 기준</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-title">잔존 수명</div>
+        <div class="metric-value">{years_to_replacement:.1f}년</div>
+        <div class="metric-sub">현재 사용 패턴 유지 시</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-# ------------------------------------------
-# TAB 1: 실시간 모니터링 (디지털 트윈 & 팩 히트맵)
-# ------------------------------------------
-with tab1:
-    mon_col1, mon_col2 = st.columns([1.2, 1])
-    
-    with mon_col1:
-        st.subheader("🌐 실시간 디지털 트윈")
-        st.write("SOH 열화 트렌드 및 온도 변화를 실시간으로 추적합니다.")
-        
-        start_stream = st.button("▶ 스트리밍 시작")
-        chart_area = st.empty()
+# ==========================================
+# 2. AI ANALYST INSIGHT
+# ==========================================
+# 가장 큰 원인 찾기
+factors = {
+    "고온 노출": temp_stress,
+    "급속 충전": fast_charge_stress,
+    "자연 노화(사용 기간)": (estimated_cycles * 0.012)
+}
+main_cause = max(factors, key=factors.get)
 
-        if start_stream:
-            cycles, preds, temps = [], [], []
-            for i in range(40):
-                cycles.append(cycle + i)
-                preds.append(soh - i * 0.08 + np.random.normal(0, 0.4))
-                temps.append(temp + np.random.normal(0, 1))
+# 개선 시뮬레이션 계산
+improved_temp = min(avg_temp, 25)
+improved_temp_stress = max(0, improved_temp - 25) * 0.8
+improved_soh_drop = (estimated_cycles * 0.012) + improved_temp_stress + fast_charge_stress
+improved_deg_rate = improved_soh_drop / years_used
+improved_years = max(0, (current_soh - 70) / improved_deg_rate) if improved_deg_rate > 0 else years_to_replacement
+life_extension = improved_years - years_to_replacement
 
-                fig = make_subplots(specs=[[{"secondary_y": True}]])
-                fig.add_trace(go.Scatter(x=cycles, y=preds, mode="lines+markers", name="SOH (%)", line=dict(color="#00ff99")), secondary_y=False)
-                fig.add_trace(go.Scatter(x=cycles, y=temps, mode="lines", name="온도 (°C)", line=dict(color="#ff9900", dash="dot")), secondary_y=True)
+insight_msg = f"현재 배터리는 <b>{'양호한' if current_soh > 80 else '열화가 진행된'} 상태</b>입니다.<br>"
+if current_soh > 70:
+    insight_msg += f"수명 단축의 가장 큰 위험 요인은 <span class='highlight'>{main_cause}</span>입니다.<br>"
+    if main_cause == "고온 노출":
+        insight_msg += f"주차/운행 환경의 평균 온도를 <b>25°C 수준으로 낮추면</b> 교체 시기를 약 <span class='highlight'>{life_extension:.1f}년 연장</span>할 수 있습니다."
+    elif main_cause == "급속 충전":
+        insight_msg += f"완속 충전 비율을 늘리면 교체 시기를 유의미하게 연장할 수 있습니다."
+else:
+    insight_msg += "<span class='highlight'>배터리 교체 권장 주기(SOH 70%)에 도달했습니다.</span> 안전을 위해 점검 및 교체를 계획해 주세요."
 
-                fig.update_layout(template="plotly_dark", height=400, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=10, b=10))
-                chart_area.plotly_chart(fig, use_container_width=True)
-                time.sleep(0.08)
-        else:
-            # Placeholder chart before streaming
-            fig_placeholder = go.Figure().update_layout(template="plotly_dark", height=400, paper_bgcolor="rgba(0,0,0,0.05)", annotations=[dict(text="스트리밍 대기 중...", showarrow=False, font=dict(size=20, color="gray"))])
-            chart_area.plotly_chart(fig_placeholder, use_container_width=True)
+st.markdown(f"""
+<div class="ai-insight-box">
+    <div class="ai-insight-title">✨ AI Analyst Insight</div>
+    <p class="ai-insight-text">{insight_msg}</p>
+</div>
+""", unsafe_allow_html=True)
 
-    with mon_col2:
-        st.subheader("🔋 배터리 팩 열화상 히트맵")
-        st.write("셀(Cell) 단위의 국부적 발열(Hot-spot)을 모니터링합니다.")
-        
-        heat = np.random.uniform(20, 40, (8, 12))
-        heat[random.randint(0, 7)][random.randint(0, 11)] += 25 # 이상 발열 모사
-        
-        fig_heat = px.imshow(heat, color_continuous_scale="Turbo", text_auto=".1f", labels=dict(color="온도 (°C)"))
-        fig_heat.update_layout(template="plotly_dark", height=400, margin=dict(t=10, b=10), paper_bgcolor="rgba(0,0,0,0)")
-        st.plotly_chart(fig_heat, use_container_width=True)
+# ==========================================
+# 3. WHY? (XAI)
+# ==========================================
+st.markdown("<div class='section-title'>Why? 배터리 열화 원인 분석</div>", unsafe_allow_html=True)
 
-# ------------------------------------------
-# TAB 2: AI 심층 분석 (수명 예측, 이상 탐지, XAI)
-# ------------------------------------------
-with tab2:
-    ai_col1, ai_col2 = st.columns(2)
-    
-    with ai_col1:
-        st.subheader("📈 확률적 RUL 예측 (Monte Carlo)")
-        future_x = np.linspace(cycle, cycle + 1500, 100)
-        all_paths = []
-        for _ in range(50):
-            path = [soh - (fc - cycle) * np.random.normal(0.015, 0.005) + np.random.normal(0, 0.5) for fc in future_x]
-            all_paths.append(path)
-            
-        all_paths = np.array(all_paths)
-        mean_path = np.mean(all_paths, axis=0)
-        
-        fig_mc = go.Figure()
-        for p in all_paths:
-            fig_mc.add_trace(go.Scatter(x=future_x, y=p, mode="lines", line=dict(width=1, color="rgba(0,255,255,0.05)"), showlegend=False))
-        fig_mc.add_trace(go.Scatter(x=future_x, y=mean_path, mode="lines", line=dict(color="#ff3366", width=3), name="예상 평균 SOH"))
-        fig_mc.update_layout(template="plotly_dark", height=350, paper_bgcolor="rgba(0,0,0,0)", margin=dict(t=10, b=10))
-        st.plotly_chart(fig_mc, use_container_width=True)
+total_stress = sum(factors.values())
+xai_df = pd.DataFrame({
+    "요인": list(factors.keys()),
+    "기여도(%)": [(v / total_stress) * 100 for v in factors.values()]
+}).sort_values(by="기여도(%)", ascending=True)
 
-    with ai_col2:
-        st.subheader("🚨 AI 다차원 이상 탐지")
-        # 합성 데이터 및 Isolation Forest
-        data = pd.DataFrame({
-            "temperature": np.concatenate([np.random.normal(temp, 2, 200), np.random.uniform(50, 80, 5)]),
-            "ir": np.concatenate([np.random.normal(ir, 0.003, 200), np.random.uniform(0.05, 0.09, 5)])
-        })
-        detector = IsolationForest(contamination=0.03, random_state=42)
-        data["status"] = np.where(detector.fit_predict(data) == -1, "이상", "정상")
-        
-        fig_anomaly = px.scatter(data, x="temperature", y="ir", color="status",
-                                 color_discrete_map={"정상": "#38bdf8", "이상": "#ef4444"})
-        fig_anomaly.update_layout(template="plotly_dark", height=350, paper_bgcolor="rgba(0,0,0,0)", margin=dict(t=10, b=10))
-        st.plotly_chart(fig_anomaly, use_container_width=True)
+fig_xai = px.bar(
+    xai_df, x="기여도(%)", y="요인", orientation='h',
+    text=xai_df["기여도(%)"].apply(lambda x: f"{x:.1f}%")
+)
+fig_xai.update_traces(marker_color='#3b82f6', textposition='outside', textfont=dict(color='#475569'))
+fig_xai.update_layout(
+    template="plotly_white",
+    height=250,
+    margin=dict(l=0, r=40, t=20, b=0),
+    xaxis=dict(showgrid=False, showticklabels=False, title=""),
+    yaxis=dict(title="", tickfont=dict(size=14, color='#334155')),
+    plot_bgcolor='rgba(0,0,0,0)',
+    paper_bgcolor='rgba(0,0,0,0)'
+)
+st.plotly_chart(fig_xai, use_container_width=True, config={'displayModeBar': False})
 
-    st.markdown("---")
-    
-    # XAI & Risk Gauge
-    xai_col1, xai_col2 = st.columns(2)
-    
-    with xai_col1:
-        st.subheader("🧠 XAI: 주요 열화 요인 기여도")
-        contrib = pd.DataFrame({"Feature": ["Cycle", "Temp", "IR", "QC", "QD"], "Contribution": [-12, -4, -8, +5, +3]})
-        fig_water = go.Figure(go.Bar(
-            x=contrib["Feature"], y=contrib["Contribution"], text=contrib["Contribution"], textposition="auto",
-            marker_color=["#ef4444" if x < 0 else "#22c55e" for x in contrib["Contribution"]]
-        ))
-        fig_water.update_layout(template="plotly_dark", height=300, paper_bgcolor="rgba(0,0,0,0)", margin=dict(t=10, b=10))
-        st.plotly_chart(fig_water, use_container_width=True)
+# ==========================================
+# 4. DIGITAL TWIN (현재 vs 개선 후)
+# ==========================================
+st.markdown("<div class='section-title'>Digital Twin 시뮬레이션</div>", unsafe_allow_html=True)
 
-    with xai_col2:
-        st.subheader("위험도 평가 지수 (Risk Index)")
-        risk_value = np.clip(100 - health_score, 0, 100)
-        gauge = go.Figure(go.Indicator(
-            mode="gauge+number", value=risk_value,
-            gauge={
-                "axis": {"range": [0, 100], "tickwidth": 1},
-                "bar": {"color": "rgba(0,0,0,0)"},
-                "steps": [{"range": [0, 40], "color": "#22c55e"}, {"range": [40, 70], "color": "#f59e0b"}, {"range": [70, 100], "color": "#ef4444"}],
-                "threshold": {"line": {"color": "white", "width": 4}, "thickness": 0.75, "value": risk_value}
-            }
-        ))
-        gauge.update_layout(template="plotly_dark", height=300, paper_bgcolor="rgba(0,0,0,0)", margin=dict(t=10, b=10))
-        st.plotly_chart(gauge, use_container_width=True)
+future_years = np.linspace(0, max(5, years_to_replacement + 2), 50)
+current_path = [max(0, current_soh - (degradation_rate_per_year * y)) for y in future_years]
+improved_path = [max(0, current_soh - (improved_deg_rate * y)) for y in future_years]
+
+fig_dt = go.Figure()
+
+# 개선 후 경로 (녹색)
+fig_dt.add_trace(go.Scatter(
+    x=future_years, y=improved_path,
+    mode='lines', name='온도 최적화 시',
+    line=dict(color='#10b981', width=3, dash='dot')
+))
+
+# 현재 패턴 경로 (파란색)
+fig_dt.add_trace(go.Scatter(
+    x=future_years, y=current_path,
+    mode='lines', name='현재 사용 패턴 유지',
+    line=dict(color='#3b82f6', width=4)
+))
+
+# 교체 기준선 (SOH 70%)
+fig_dt.add_hline(y=70, line_dash="dash", line_color="#ef4444", annotation_text="교체 권장선 (SOH 70%)", annotation_position="bottom left")
+
+fig_dt.update_layout(
+    template="plotly_white",
+    height=350,
+    margin=dict(l=0, r=0, t=20, b=0),
+    xaxis_title="앞으로의 경과 시간 (년)",
+    yaxis_title="배터리 건강도 (SOH %)",
+    yaxis=dict(range=[50, 100]),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    plot_bgcolor='rgba(0,0,0,0)',
+    paper_bgcolor='rgba(0,0,0,0)'
+)
+st.plotly_chart(fig_dt, use_container_width=True, config={'displayModeBar': False})
+
+# ==========================================
+# 5. MONTE CARLO (신뢰 구간)
+# ==========================================
+st.markdown("<div class='section-title'>수명 예측 신뢰구간 (Monte Carlo 95%)</div>", unsafe_allow_html=True)
+
+# 몬테카를로 노이즈 생성
+mc_paths = []
+for _ in range(100):
+    noise = np.random.normal(0, 1.5, len(future_years))
+    # 누적 노이즈(Random Walk) 적용
+    rw_noise = np.cumsum(noise) * 0.2
+    path = np.clip(current_path + rw_noise, 0, 100)
+    mc_paths.append(path)
+
+mc_paths = np.array(mc_paths)
+upper_bound = np.percentile(mc_paths, 95, axis=0)
+lower_bound = np.percentile(mc_paths, 5, axis=0)
+
+fig_mc = go.Figure()
+
+# 95% 신뢰구간 채우기
+fig_mc.add_trace(go.Scatter(
+    x=np.concatenate([future_years, future_years[::-1]]),
+    y=np.concatenate([upper_bound, lower_bound[::-1]]),
+    fill='toself', fillcolor='rgba(148, 163, 184, 0.2)',
+    line=dict(color='rgba(255,255,255,0)'),
+    name='95% 신뢰구간',
+    hoverinfo="skip"
+))
+
+# 평균선
+fig_mc.add_trace(go.Scatter(
+    x=future_years, y=current_path,
+    mode='lines', name='예상 평균치',
+    line=dict(color='#64748b', width=2)
+))
+
+fig_mc.update_layout(
+    template="plotly_white",
+    height=300,
+    margin=dict(l=0, r=0, t=20, b=0),
+    xaxis_title="앞으로의 경과 시간 (년)",
+    yaxis_title="SOH (%)",
+    yaxis=dict(range=[50, 100]),
+    showlegend=False,
+    plot_bgcolor='rgba(0,0,0,0)',
+    paper_bgcolor='rgba(0,0,0,0)'
+)
+st.plotly_chart(fig_mc, use_container_width=True, config={'displayModeBar': False})
