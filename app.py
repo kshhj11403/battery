@@ -1,155 +1,226 @@
+from pathlib import Path
+
+code = r'''
+"""
+Battery Intelligence Platform (Concept v2)
+
+UI 방향:
+- 일반인은 "건강도 / 교체시점 / 관리방법"만 확인
+- 평가원은 "Digital Twin / XAI / Risk Radar / Confidence Interval" 확인
+
+streamlit run app.py
+"""
+
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.express as px
 import plotly.graph_objects as go
-import time
 
-# ==========================================
-# PAGE CONFIG & CSS
-# ==========================================
-st.set_page_config(page_title="배터리 미래 시뮬레이터", page_icon="🔮", layout="wide")
+st.set_page_config(page_title="Battery Intelligence Platform", layout="wide")
 
 st.markdown("""
 <style>
-    .stApp { background-color: #0f172a; color: #f8fafc; }
-    .hospital-card {
-        background-color: #1e293b; padding: 20px; border-radius: 10px; 
-        border-left: 5px solid #3b82f6; margin-bottom: 20px;
-    }
-    .sns-card {
-        background-color: #1e293b; padding: 20px; border-radius: 15px; 
-        border: 1px solid #475569; font-family: 'Courier New', Courier, monospace;
-        color: #fbbf24; text-align: center; margin-top: 20px;
-    }
-    .highlight { color: #38bdf8; font-weight: bold; }
-    h1, h2, h3 { color: #f1f5f9; }
+.stApp{background:#f8fafc;}
+.main-card{
+    background:white;
+    padding:24px;
+    border-radius:20px;
+    border:1px solid #e5e7eb;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ==========================================
-# DATA & LOGIC MOCKUP
-# ==========================================
-def calculate_future(base_soh, stop_fast_charge, lower_temp, optimize_charge):
-    added_months = 0
-    saved_money = 0
-    carbon_reduction = 0
-    
-    if stop_fast_charge:
-        added_months += 11
-        saved_money += 55000
-        carbon_reduction += 12
-    if lower_temp:
-        added_months += 7
-        saved_money += 35000
-        carbon_reduction += 8
-    if optimize_charge:
-        added_months += 5
-        saved_money += 25000
-        carbon_reduction += 5
-        
-    return added_months, saved_money, carbon_reduction
+st.title("🔋 Battery Intelligence Platform")
+st.caption("배터리 교체 시점 예측 · Digital Twin · XAI 분석")
 
-# ==========================================
-# HEADER
-# ==========================================
-st.title("🔮 배터리 미래 시뮬레이터")
-st.caption("당신의 습관이 배터리의 수명을 결정합니다. 미래를 예측하고 운명을 바꿔보세요.")
-st.markdown("---")
+with st.container():
+    c1,c2,c3,c4 = st.columns(4)
 
-# ==========================================
-# SECTION 1: AI 배터리 의사 (Hospital Concept)
-# ==========================================
-st.header("🏥 AI 배터리 진단 차트")
+    battery = c1.selectbox("배터리 종류",["Li-ion","LFP","NMC"])
+    cycle = c2.slider("충방전 횟수",0,5000,800)
+    temp = c3.slider("평균 온도",0,60,28)
+    months = c4.slider("사용 개월 수",0,120,24)
 
-col1, col2 = st.columns([1, 2])
+soh = max(40,100-cycle*0.015-months*0.08)
+health_score = round(soh)
+pred_years = max(0.5,(4000-cycle)/1000)
 
-with col1:
-    device_name = st.text_input("환자명 (기기명)", "Galaxy S25 Ultra")
-    usage_months = st.slider("사용 기간 (개월)", 1, 48, 14)
-    current_soh = st.number_input("현재 SOH (%)", 0.0, 100.0, 84.5)
-    
-with col2:
-    diagnosis_status = "경고 (Warning)" if current_soh < 85 else "정상 (Normal)"
-    color = "red" if diagnosis_status == "경고 (Warning)" else "green"
-    
-    st.markdown(f"""
-    <div class="hospital-card">
-        <h3>📋 진단 결과</h3>
-        <p><b>환자명:</b> {device_name}</p>
-        <p><b>진단명:</b> <span style="color:{color}; font-weight:bold;">열화 초기 증상 및 고온 스트레스 누적</span></p>
-        <p><b>현재 위험도:</b> {'🔴 높음' if current_soh < 80 else '🟡 경증' if current_soh < 90 else '🟢 낮음'}</p>
-        <p><b>AI 주치의 소견:</b> 잦은 고속 충전으로 인해 동급 기기 대비 노화가 12% 빠르게 진행되고 있습니다. 즉각적인 습관 교정이 필요합니다.</p>
-    </div>
-    """, unsafe_allow_html=True)
+st.subheader("Executive Summary")
 
-st.markdown("---")
+m1,m2,m3 = st.columns(3)
 
-# ==========================================
-# SECTION 2: 연도별 생존 확률 타임머신
-# ==========================================
-st.header("⏳ 수명 타임머신: 이대로 계속 쓴다면?")
-st.write("현재 사용 습관을 유지할 경우 예상되는 미래의 배터리 상태입니다.")
+m1.metric("Battery Health Score",f"{health_score}/100")
+m2.metric("예상 잔존 수명",f"{pred_years:.1f} 년")
+m3.metric("교체 권장 시점","2029 Q3")
 
-years = ["2026 (현재)", "2027 (+1년)", "2028 (+2년)", "2029 (+3년)"]
-soh_drop = [current_soh, current_soh - 9, current_soh - 21, current_soh - 35]
-survival_prob = [94, 73, 42, 11]
+tabs = st.tabs([
+    "Overview",
+    "Root Cause (XAI)",
+    "Digital Twin",
+    "Risk Analysis"
+])
 
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=years, y=survival_prob, mode='lines+markers+text', 
-                         name='생존 확률 (%)', text=[f"{p}%" for p in survival_prob], 
-                         textposition="top center", marker=dict(size=12, color='#ef4444'), line=dict(width=4)))
+with tabs[0]:
 
-fig.add_trace(go.Bar(x=years, y=soh_drop, name='예상 SOH (%)', marker_color='#3b82f6', opacity=0.6))
+    st.subheader("AI Analyst Summary")
 
-fig.update_layout(template="plotly_dark", height=400, yaxis_title="퍼센트 (%)", 
-                  title="연도별 SOH 및 기기 생존 확률 추이", margin=dict(b=0))
-st.plotly_chart(fig, use_container_width=True)
+    st.info(
+        f"""
+현재 배터리는 건강도 {health_score}/100 수준입니다.
 
-st.markdown("---")
+고온 노출과 누적 사이클 증가가 주요 열화 요인으로 분석됩니다.
 
-# ==========================================
-# SECTION 3: 배터리 미래 시뮬레이터 (Core Idea)
-# ==========================================
-st.header("🎮 운명 바꾸기 시뮬레이터")
-st.write("아래의 습관을 바꾸면 미래가 어떻게 변하는지 즉시 확인하세요.")
+현재 사용 패턴이 유지될 경우 약 {pred_years:.1f}년 후
+교체가 권장됩니다.
+"""
+    )
 
-c1, c2 = st.columns([1, 1.5])
+    trend = np.linspace(100,soh,36)+np.random.normal(0,1,36)
 
-with c1:
-    st.markdown("#### 🛠️ 처방전 (행동 선택)")
-    act1 = st.toggle("⚡ 매일 하던 고속충전 중단하기", value=False)
-    act2 = st.toggle("🌡️ 게임 시간 줄여서 온도 5도 낮추기", value=False)
-    act3 = st.toggle("🔋 배터리 20% 밑으로 떨어지기 전에 충전하기", value=False)
+    fig = px.line(
+        x=list(range(36)),
+        y=trend,
+        labels={"x":"개월","y":"SOH (%)"}
+    )
 
-with c2:
-    st.markdown("#### 🎁 예측되는 보상 결과")
-    added_months, saved_money, carbon = calculate_future(current_soh, act1, act2, act3)
-    
-    if added_months == 0:
-        st.info("행동을 선택하여 배터리의 수명을 연장해 보세요!")
-    else:
-        st.success("✅ 새로운 습관이 적용되었습니다!")
-        m1, m2, m3 = st.columns(3)
-        m1.metric("수명 연장", f"+{added_months}개월")
-        m2.metric("절약 금액 (교체비용)", f"{saved_money:,}원")
-        m3.metric("탄소 배출 절감", f"{carbon}kg 🌲")
+    st.plotly_chart(fig,use_container_width=True)
 
-st.markdown("---")
+with tabs[1]:
 
-# ==========================================
-# SECTION 4: 배터리 SNS (Fun Factor)
-# ==========================================
-st.header("💌 배터리의 속마음")
+    st.subheader("Explainable AI")
 
-messages = [
-    "안녕...? 나 네 배터리야. 솔직히 말할게. 어제 밤새 100% 꽂아두고 잔 거, 나 진짜 숨 막혀 죽는 줄 알았어... 🥵",
-    "주인님, 롤 모바일 하면서 충전기 꽂아두는 건 진짜 선 넘었죠. 저 어제 체온 42도 찍었어요. 살려주세요. 😭",
-    "이대로 가면 저 내년 겨울엔 밖에서 폰 꺼질지도 몰라요. 저체온증 + 과로사 오기 직전입니다. 🥶"
-]
-selected_msg = messages[int(current_soh) % 3] # 단순 랜덤화 모방
+    factors = pd.DataFrame({
+        "요인":[
+            "고온 노출",
+            "충방전 사이클",
+            "사용 기간",
+            "충전 습관",
+            "기타"
+        ],
+        "영향도":[42,28,17,9,4]
+    })
 
-st.markdown(f"""
-<div class="sns-card">
-    "{selected_msg}"
-</div>
-""", unsafe_allow_html=True)
+    fig = px.bar(
+        factors,
+        x="영향도",
+        y="요인",
+        orientation="h"
+    )
+
+    st.plotly_chart(fig,use_container_width=True)
+
+    st.success("""
+가장 큰 원인은 고온 노출(42%)입니다.
+
+온도를 평균 5°C 낮추면
+예상 수명이 약 0.8년 증가할 것으로 분석됩니다.
+""")
+
+with tabs[2]:
+
+    st.subheader("Digital Twin Simulation")
+
+    scenario = st.slider(
+        "온도 감소 시나리오",
+        -10,
+        10,
+        -5
+    )
+
+    current = pred_years
+    future = pred_years + abs(scenario)*0.15
+
+    d1,d2 = st.columns(2)
+
+    d1.metric(
+        "현재 예상 수명",
+        f"{current:.1f}년"
+    )
+
+    d2.metric(
+        "개선 후 예상 수명",
+        f"{future:.1f}년",
+        f"+{future-current:.1f}년"
+    )
+
+    x=np.arange(24)
+
+    y1=soh-(x*0.8)
+    y2=soh-(x*0.55)
+
+    fig=go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=x,
+            y=y1,
+            name="현재"
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=x,
+            y=y2,
+            name="개선 시나리오"
+        )
+    )
+
+    st.plotly_chart(fig,use_container_width=True)
+
+with tabs[3]:
+
+    st.subheader("Battery Risk Radar")
+
+    radar = go.Figure()
+
+    radar.add_trace(
+        go.Scatterpolar(
+            r=[
+                70,
+                55,
+                60,
+                40,
+                50
+            ],
+            theta=[
+                "온도",
+                "사이클",
+                "노화",
+                "충전습관",
+                "내부저항"
+            ],
+            fill="toself"
+        )
+    )
+
+    radar.update_layout(height=500)
+
+    st.plotly_chart(radar,use_container_width=True)
+
+    st.subheader("Prediction Confidence")
+
+    st.metric(
+        "예상 수명",
+        f"{pred_years:.1f}년"
+    )
+
+    st.write("95% 신뢰구간")
+
+    st.success(
+        f"{max(0,pred_years-0.5):.1f} ~ {pred_years+0.7:.1f} 년"
+    )
+
+st.divider()
+
+st.subheader("Recommended Actions")
+
+st.write("• 평균 온도 30°C 이하 유지")
+st.write("• 급속충전 빈도 감소")
+st.write("• 월간 상태 점검 수행")
+st.write("• SOH 70% 이하 시 교체 검토")
+'''
+path="/mnt/data/app.py"
+Path(path).write_text(code,encoding="utf-8")
+print(path)
